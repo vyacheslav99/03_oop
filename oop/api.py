@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import abc
+import os
 import json
 import datetime
 import logging
@@ -283,8 +283,12 @@ class MainHTTPHandler(BaseHTTPRequestHandler):
 
         try:
             data_string = self.rfile.read(int(self.headers['Content-Length']))
-            # todo: Убери replace перед сдачей!
-            request = json.loads(data_string.decode('cp1251').replace("'", '"'))
+            # под windows тут надо немного поправить механизм декодирования параметров запроса
+            # да, и кавычки заменять, потому что в командной строке нельзя экранировать параметры одинарной кавычкой
+            if os.name == 'nt':
+                request = json.loads(data_string.decode('cp1251').replace("'", '"'))
+            else:
+                request = json.loads(data_string)
         except:
             logging.exception('Error!')
             code = BAD_REQUEST
