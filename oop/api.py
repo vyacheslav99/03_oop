@@ -230,7 +230,10 @@ def method_handler(request, ctx, store):
     if not check_auth(request_):
         return ERRORS[FORBIDDEN], FORBIDDEN
 
-    return router[request_.method](request_, ctx, store)
+    if request_.method in router:
+        return router[request_.method](request_, ctx, store)
+    else:
+        return "{0}! {1}".format(ERRORS[BAD_REQUEST], 'Method "{0}" not found'.format(request_.method)), BAD_REQUEST
 
 def scores_handler(request, context, store):
     context['has'] = [field for field, value in request.arguments.items() if value]
@@ -241,7 +244,7 @@ def scores_handler(request, context, store):
     try:
         obj = OnlineScoreRequest(**request.arguments)
     except Exception, e:
-        return u"{0}! {1}".format(ERRORS[INVALID_REQUEST], e), INVALID_REQUEST
+        return "{0}! {1}".format(ERRORS[INVALID_REQUEST], e), INVALID_REQUEST
 
     return {'score': scoring.get_score(store, obj.phone, obj.email, obj.birthday, obj.gender,
         obj.first_name, obj.last_name)}, OK
