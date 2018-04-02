@@ -40,9 +40,10 @@ GENDERS = {
 
 class Field(object):
 
-    def __init__(self, required=False, nullable=True):
-        self.required = required # как проверять requred я пока не понял...
+    def __init__(self, required=False, nullable=True, field_name=None):
+        self.required = required
         self.nullable = nullable
+        self.field_name = field_name
 
         # не совсем понятно, зачем хранить value в словаре, если на каждое поле всеравно инциализируется отдельный
         # экземпляр Field и словарь будет содержать всегда 1 ключ... Разве что если значение еще не устанавливалось
@@ -52,26 +53,34 @@ class Field(object):
         self.value = None
 
     def __get__(self, instance, owner):
-        if not self.nullable and self.value is None:
-            # значение еще не устанавливалось. Для not null надо вызывать исключение, в остальных случаях не существенно
-            raise ValueError('Value is not set!')
+        if (not self.nullable or self.required) and self.value is None:
+            # значение еще не устанавливалось. Для обязательных полей надо вызывать исключение,
+            # в остальных случаях не существенно
+            raise ValueError(self.error_message('Value is not set!'))
 
         return self.value
 
     def __set__(self, instance, value):
+        # флаг None будет сигнализировать о том, что поле вобще отсутсвует в запросе
+        if self.required and value is None:
+            raise ValueError(self.error_message('Missing required value!'))
+
         # остановился на более широком понимании "не пустое", т.к. сдается мне, что в Т.З. всетаки имеется ввиду,
         # что если nullable=False, то поле должно быть не пустым в самом широком смысле, а не только not is None
         if not self.nullable and not value: # value is None:
-            raise ValueError('Field: {0}. Write EMPTY value to NOT EMPTY field!'.format(type(self)))
+            raise ValueError(self.error_message('Write EMPTY value to NOT EMPTY field!'))
 
         self.value = value
+
+    def error_message(self, msg):
+        return '{0}{1}'.format('Field: {0}. '.format(self.field_name) if self.field_name else '', msg)
 
 class CharField(Field):
 
     def __set__(self, instance, value):
         if value is not None and not isinstance(value, (str, unicode)):
-            raise TypeError('Invalid value type of Char field! Expected: string or unicode, got: ' \
-                '{0} of type {1}'.format(value, type(value)))
+            raise TypeError(self.error_message('Invalid value type of Char field! Expected: string or unicode, '
+                'got: {0} of type {1}'.format(value, type(value))))
 
         super(CharField, self).__set__(instance, value)
 
@@ -79,8 +88,8 @@ class ArgumentsField(Field):
 
     def __set__(self, instance, value):
         if value is not None and not isinstance(value, dict):
-            raise TypeError('Invalid value type of Arguments filed! Expected: dict, got: {0} of type {1}'.format(
-                value, type(value)))
+            raise TypeError(self.error_message('Invalid value type of Arguments filed! Expected: dict, got: '
+                '{0} of type {1}'.format(value, type(value))))
 
         super(ArgumentsField, self).__set__(instance, value)
 
@@ -90,17 +99,17 @@ class EmailField(CharField):
         super(EmailField, self).__set__(instance, value)
 
         if value and '@' not in value:
-            raise ValueError('Invalid value of Email field! Value must be a e-mail address')
+            raise ValueError(self.error_message('Invalid value of Email field! Value must be a e-mail address'))
 
 class PhoneField(Field):
 
     def __set__(self, instance, value):
         if value is not None and not isinstance(value, (int, str, unicode)):
-            raise TypeError('Invalid value type of Phone field! Expected: int or string or unicode, got: ' \
-                '{0} of type {1}'.format(value, type(value)))
+            raise TypeError(self.error_message('Invalid value type of Phone field! Expected: int or string or unicode,'
+                ' got: {0} of type {1}'.format(value, type(value))))
 
         if value and (len(str(value)) != 11 or not str(value).startswith('7')):
-            raise ValueError('Invalid value! Value must be a phone number')
+            raise ValueError(self.error_message('Invalid value! Value must be a phone number'))
 
         super(PhoneField, self).__set__(instance, value)
 
@@ -111,8 +120,8 @@ class DateField(Field):
             try:
                 value = datetime.datetime.strptime(value, '%d.%m.%Y').date()
             except:
-                raise TypeError('Invalid value type or format of Date field! Expected: date or str format "DD.MM.YYYY",' \
-                    'got: {0} of type: {1}'.format(value, type(value)))
+                raise TypeError(self.error_message('Invalid value type or format of Date field! '
+                    'Expected: date or str format "DD.MM.YYYY", got: {0} of type: {1}'.format(value, type(value))))
 
         if value is not None and isinstance(value, datetime.datetime):
             value = value.date()
@@ -125,54 +134,54 @@ class BirthDayField(DateField):
         super(BirthDayField, self).__set__(instance, value)
 
         if self.value and datetime.date.today() - self.value > datetime.timedelta(days=365*70):
-            raise ValueError('Invalid value of Birthday field! Age can`t be more than 70 years')
+            raise ValueError(self.error_message('Invalid value of Birthday field! Age can`t be more than 70 years'))
 
 class GenderField(Field):
 
     def __set__(self, instance, value):
         if value is not None and not isinstance(value, int):
-            raise TypeError('Invalid value type of Gender field! Expected: int, got: {0} of type {1}'.format(
-                value, type(value)))
+            raise TypeError(self.error_message('Invalid value type of Gender field! Expected: int, '
+                'got: {0} of type {1}'.format(value, type(value))))
 
         if value and value not in GENDERS:
-            raise ValueError('Invalid value of Gender field! Value must be in the range '
-                '(0 - unknown, 1 - male, 2 - female)')
+            raise ValueError(self.error_message('Invalid value of Gender field! Value must be in the range '
+                '(0 - unknown, 1 - male, 2 - female)'))
 
         super(GenderField, self).__set__(instance, value)
 
 class ClientIDsField(Field):
 
-    def __init__(self, required=False):
-        super(ClientIDsField, self).__init__(required=required, nullable=False)
+    def __init__(self, required=False, field_name=None):
+        super(ClientIDsField, self).__init__(required=required, nullable=False, field_name=field_name)
 
     def __set__(self, instance, value):
         if value is not None and not isinstance(value, (list, tuple)):
-            raise TypeError('Invalid value type of Client id`s field! Expected: list or tuple, got: ' \
-                '{0} of type {1}'.format(value, type(value)))
+            raise TypeError(self.error_message('Invalid value type of Client id`s field! Expected: list or tuple, '
+                'got: {0} of type {1}'.format(value, type(value))))
 
         if not value:
-            raise ValueError('Invalid value of Client id`s field! Value cannot be empty or None')
+            raise ValueError(self.error_message('Invalid value of Client id`s field! Value cannot be empty or None'))
 
         super(ClientIDsField, self).__set__(instance, value)
 
 
 class ClientsInterestsRequest(object):
 
-    client_ids = ClientIDsField(required=True)
-    date = DateField(required=False, nullable=True)
+    client_ids = ClientIDsField(required=True, field_name='client_ids')
+    date = DateField(required=False, nullable=True, field_name='date')
 
     def __init__(self, **kwargs):
-        self.client_ids = kwargs.get('client_ids', tuple())
+        self.client_ids = kwargs.get('client_ids', None)
         self.date = kwargs.get('date', None)
 
 class OnlineScoreRequest(object):
 
-    first_name = CharField(required=False, nullable=True)
-    last_name = CharField(required=False, nullable=True)
-    email = EmailField(required=False, nullable=True)
-    phone = PhoneField(required=False, nullable=True)
-    birthday = BirthDayField(required=False, nullable=True)
-    gender = GenderField(required=False, nullable=True)
+    first_name = CharField(required=False, nullable=True, field_name='first_name')
+    last_name = CharField(required=False, nullable=True, field_name='last_name')
+    email = EmailField(required=False, nullable=True, field_name='email')
+    phone = PhoneField(required=False, nullable=True, field_name='phone')
+    birthday = BirthDayField(required=False, nullable=True, field_name='birthday')
+    gender = GenderField(required=False, nullable=True, field_name='gender')
 
     def __init__(self, **kwargs):
         self.first_name = kwargs.get('first_name', None)
@@ -183,30 +192,30 @@ class OnlineScoreRequest(object):
         self.gender = kwargs.get('gender', None)
 
         if not self.is_valid():
-            raise Exception('Not all required fields are filled in: {0}'.format(self.invalid_fields()))
+            raise ValueError('Not all required fields are filled in: {0}'.format(self.invalid_fields()))
 
     def is_valid(self):
-        return (self.phone or self.email) and (self.first_name or self.last_name) and (self.gender or self.birthday)
+        return (self.phone and self.email) or (self.first_name and self.last_name) or (self.gender and self.birthday)
 
     def invalid_fields(self):
         msg = []
-        if not self.phone and not self.email: msg.append('Phone or Email')
-        if not self.first_name and not self.last_name: msg.append('First name or Last name')
-        if not self.gender and not self.birthday: msg.append('Gender or Birthday')
-        return ', '.join(msg)
+        if not self.phone or not self.email: msg.append('Phone and Email')
+        if not self.first_name or not self.last_name: msg.append('First name and Last name')
+        if not self.gender or not self.birthday: msg.append('Gender and Birthday')
+        return ' or '.join(msg)
 
 class MethodRequest(object):
-    account = CharField(required=False, nullable=True)
-    login = CharField(required=True, nullable=True)
-    token = CharField(required=True, nullable=True)
-    arguments = ArgumentsField(required=True, nullable=True)
-    method = CharField(required=True, nullable=False)
+    account = CharField(required=False, nullable=True, field_name='account')
+    login = CharField(required=True, nullable=True, field_name='login')
+    token = CharField(required=True, nullable=True, field_name='token')
+    arguments = ArgumentsField(required=True, nullable=True, field_name='arguments')
+    method = CharField(required=True, nullable=False, field_name='method')
 
     def __init__(self, **kwargs):
         self.account = kwargs.get('account', None)
         self.login = kwargs.get('login', None)
         self.token = kwargs.get('token', None)
-        self.arguments = kwargs.get('arguments', {})
+        self.arguments = kwargs.get('arguments', None)
         self.method = kwargs.get('method', None)
 
     @property
@@ -218,14 +227,21 @@ def check_auth(request):
     if request.login == ADMIN_LOGIN:
         digest = hashlib.sha512(datetime.datetime.now().strftime("%Y%m%d%H") + ADMIN_SALT).hexdigest()
     else:
-        digest = hashlib.sha512(request.account + request.login + SALT).hexdigest()
+        digest = hashlib.sha512(request.account if request.account else '' + request.login + SALT).hexdigest()
+
+    if debug:
+        logging.debug('Actual digest: {0}'.format(digest))
+
     if digest == request.token:
         return True
     return False
 
 def method_handler(request, ctx, store):
     # returns: response - json data or str (error message), code - response code
-    request_ = MethodRequest(**request['body'])
+    try:
+        request_ = MethodRequest(**request['body'])
+    except (TypeError, ValueError), e:
+        return "{0}! {1}".format(ERRORS[INVALID_REQUEST], e), INVALID_REQUEST
 
     if not check_auth(request_):
         return ERRORS[FORBIDDEN], FORBIDDEN
@@ -243,19 +259,19 @@ def scores_handler(request, context, store):
 
     try:
         obj = OnlineScoreRequest(**request.arguments)
-    except Exception, e:
+    except (TypeError, ValueError), e:
         return "{0}! {1}".format(ERRORS[INVALID_REQUEST], e), INVALID_REQUEST
 
     return {'score': scoring.get_score(store, obj.phone, obj.email, obj.birthday, obj.gender,
         obj.first_name, obj.last_name)}, OK
 
 def interests_handler(request, context, store):
-    context['nclients'] = len(request.arguments['client_ids'])
+    context['nclients'] = len(request.arguments.get('client_ids', ()))
     res = {}
 
     try:
         obj = ClientsInterestsRequest(**request.arguments)
-    except Exception, e:
+    except (TypeError, ValueError), e:
         return u"{0}! {1}".format(ERRORS[INVALID_REQUEST], e), INVALID_REQUEST
 
     for cid in obj.client_ids:
@@ -322,11 +338,12 @@ class MainHTTPHandler(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
+    debug = False
     op = OptionParser()
     op.add_option("-p", "--port", action="store", type=int, default=8080)
     op.add_option("-l", "--log", action="store", default=None)
     (opts, args) = op.parse_args()
-    logging.basicConfig(filename=opts.log, level=logging.INFO,
+    logging.basicConfig(filename=opts.log, level=logging.DEBUG if debug else logging.INFO,
         format='[%(asctime)s] %(levelname).1s %(message)s', datefmt='%Y.%m.%d %H:%M:%S')
     server = HTTPServer(("localhost", opts.port), MainHTTPHandler)
     logging.info("Starting server at %s" % opts.port)
