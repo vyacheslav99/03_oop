@@ -60,7 +60,7 @@ class Field(object):
         if (not self.nullable or self.required) and self.value is None:
             # значение еще не устанавливалось. Для обязательных полей надо вызывать исключение,
             # в остальных случаях не существенно
-            raise ValueError(self.error_message('Value is not set!'))
+            raise ValueError(self.error_message('Not specified REQUIRED or NOT NULL field value!'))
 
         return self.value
 
@@ -175,6 +175,9 @@ class ClientsInterestsRequest(object):
     date = DateField(required=False, nullable=True, field_name='date')
 
     def __init__(self, **kwargs):
+        # такой подход красив, но имеет 1 минус - если не передано required поле, на данном этапе не возникнет
+        # исключения. Оно возникнет только при попытке считать значение этого поля. В данном случае это поведение
+        # вполне укладывается в логику, но...
         for arg in kwargs:
             setattr(self, arg, kwargs[arg])
 
@@ -240,16 +243,16 @@ def method_handler(request, ctx, store):
     # returns: response - json data or str (error message), code - response code
     try:
         request_ = MethodRequest(**request['body'])
+
+        if not check_auth(request_):
+            return ERRORS[FORBIDDEN], FORBIDDEN
+
+        if request_.method in router:
+            return router[request_.method](request_, ctx, store)
+        else:
+            return "{0}! {1}".format(ERRORS[BAD_REQUEST], 'Method "{0}" not found'.format(request_.method)), BAD_REQUEST
     except (TypeError, ValueError), e:
         return "{0}! {1}".format(ERRORS[INVALID_REQUEST], e), INVALID_REQUEST
-
-    if not check_auth(request_):
-        return ERRORS[FORBIDDEN], FORBIDDEN
-
-    if request_.method in router:
-        return router[request_.method](request_, ctx, store)
-    else:
-        return "{0}! {1}".format(ERRORS[BAD_REQUEST], 'Method "{0}" not found'.format(request_.method)), BAD_REQUEST
 
 def scores_handler(request, context, store):
     context['has'] = [field for field, value in request.arguments.items() if value]
@@ -257,22 +260,14 @@ def scores_handler(request, context, store):
     if request.is_admin:
         return {'score': 42}, OK
 
-    try:
-        obj = OnlineScoreRequest(**request.arguments)
-    except (TypeError, ValueError), e:
-        return "{0}! {1}".format(ERRORS[INVALID_REQUEST], e), INVALID_REQUEST
-
+    obj = OnlineScoreRequest(**request.arguments)
     return {'score': scoring.get_score(store, obj.phone, obj.email, obj.birthday, obj.gender,
         obj.first_name, obj.last_name)}, OK
 
 def interests_handler(request, context, store):
     context['nclients'] = len(request.arguments.get('client_ids', ()))
     res = {}
-
-    try:
-        obj = ClientsInterestsRequest(**request.arguments)
-    except (TypeError, ValueError), e:
-        return u"{0}! {1}".format(ERRORS[INVALID_REQUEST], e), INVALID_REQUEST
+    obj = ClientsInterestsRequest(**request.arguments)
 
     for cid in obj.client_ids:
         res['client_id{0}'.format(cid)] = scoring.get_interests(store, cid)
