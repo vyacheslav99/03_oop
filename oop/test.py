@@ -1,9 +1,12 @@
+# -*- coding: utf-8 -*-
+
 import unittest
 
 import api
 
 
 class TestSuite(unittest.TestCase):
+
     def setUp(self):
         self.context = {}
         self.headers = {}
