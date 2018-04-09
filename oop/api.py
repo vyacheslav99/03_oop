@@ -11,6 +11,7 @@ from optparse import OptionParser
 from BaseHTTPServer import HTTPServer, BaseHTTPRequestHandler
 
 import scoring
+import store
 
 SALT = "Otus"
 ADMIN_LOGIN = "admin"
@@ -40,6 +41,8 @@ GENDERS = {
     MALE: "male",
     FEMALE: "female",
 }
+
+debug = False
 
 
 class Field(object):
@@ -176,10 +179,10 @@ class ClientsInterestsRequest(object):
 
     def __init__(self, **kwargs):
         # такой подход красив, но имеет 1 минус - если не передано required поле, на данном этапе не возникнет
-        # исключения. Оно возникнет только при попытке считать значение этого поля. В данном случае это поведение
-        # вполне укладывается в логику, но...
-        for arg in kwargs:
-            setattr(self, arg, kwargs[arg])
+        # исключения. А возникнет только только при попытке считать значение этого поля.
+        #for arg in kwargs:
+        for field in ['client_ids', 'date']:
+            setattr(self, field, kwargs.get(field, None))
 
 class OnlineScoreRequest(object):
 
@@ -191,8 +194,9 @@ class OnlineScoreRequest(object):
     gender = GenderField(required=False, nullable=True, field_name='gender')
 
     def __init__(self, **kwargs):
-        for arg in kwargs:
-            setattr(self, arg, kwargs[arg])
+        #for arg in kwargs:  # такой подход не вызывает исключения при отсутсвии обязательного аргумента
+        for field in ['first_name', 'last_name', 'email', 'phone', 'birthday', 'gender']:
+            setattr(self, field, kwargs.get(field, None))
 
         if not self.is_valid():
             raise ValueError('Not all required fields are filled in: {0}'.format(self.invalid_fields()))
@@ -218,25 +222,30 @@ class MethodRequest(object):
     method = CharField(required=True, nullable=False, field_name='method')
 
     def __init__(self, **kwargs):
-        for arg in kwargs:
-            setattr(self, arg, kwargs[arg])
+        #for arg in kwargs:  # такой подход не вызывает исключения при отсутсвии обязательного аргумента
+        for field in ['account', 'login', 'token', 'arguments', 'method']:
+            setattr(self, field, kwargs.get(field, None))
 
     @property
     def is_admin(self):
         return self.login == ADMIN_LOGIN
 
 
-def check_auth(request):
-    if request.login == ADMIN_LOGIN:
-        digest = hashlib.sha512(datetime.datetime.now().strftime("%Y%m%d%H") + ADMIN_SALT).hexdigest()
+def get_token(account, login):
+    if login == ADMIN_LOGIN:
+        return hashlib.sha512(datetime.datetime.now().strftime("%Y%m%d%H") + ADMIN_SALT).hexdigest()
     else:
-        digest = hashlib.sha512(request.account if request.account else '' + request.login + SALT).hexdigest()
+        return hashlib.sha512(account + login + SALT).hexdigest()
+
+def check_auth(request):
+    digest = get_token(request.account if request.account else '', request.login)
 
     if debug:
         logging.debug('Actual digest: {0}'.format(digest))
 
     if digest == request.token:
         return True
+
     return False
 
 def method_handler(request, ctx, store):
@@ -284,7 +293,7 @@ class MainHTTPHandler(BaseHTTPRequestHandler):
     router = {
         "method": method_handler
     }
-    store = None
+    store = store.MyStore()
 
     def get_request_id(self, headers):
         return headers.get('HTTP_X_REQUEST_ID', uuid.uuid4().hex)
@@ -333,7 +342,6 @@ class MainHTTPHandler(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
-    debug = False
     op = OptionParser()
     op.add_option("-p", "--port", action="store", type=int, default=8080)
     op.add_option("-l", "--log", action="store", default=None)
