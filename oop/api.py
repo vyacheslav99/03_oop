@@ -179,7 +179,7 @@ class ClientsInterestsRequest(object):
 
     def __init__(self, **kwargs):
         # такой подход красив, но имеет 1 минус - если не передано required поле, на данном этапе не возникнет
-        # исключения. А возникнет только только при попытке считать значение этого поля.
+        # исключения. Вобще оно возникнет, но только потом - при попытке считать значение этого поля...
         #for arg in kwargs:
         for field in ['client_ids', 'date']:
             setattr(self, field, kwargs.get(field, None))
