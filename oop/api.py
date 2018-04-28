@@ -7,6 +7,7 @@ import datetime
 import logging
 import hashlib
 import uuid
+from weakref import WeakKeyDictionary
 from optparse import OptionParser
 from BaseHTTPServer import HTTPServer, BaseHTTPRequestHandler
 
@@ -51,21 +52,15 @@ class Field(object):
         self.required = required
         self.nullable = nullable
         self.field_name = field_name
-
-        # не совсем понятно, зачем хранить value в словаре, если на каждое поле всеравно инциализируется отдельный
-        # экземпляр Field и словарь будет содержать всегда 1 ключ... Разве что если значение еще не устанавливалось
-        # он будет пустой - как признак того, что поле не инициализировано.
-        # Пока попробую просто хранить значение напрямую...
-        # self.value = {}  # WeakKeyDictionary()
-        self.value = None
+        self.value = WeakKeyDictionary()
 
     def __get__(self, instance, owner):
-        if (not self.nullable or self.required) and self.value is None:
+        if (not self.nullable or self.required) and not self.value[instance]:
             # значение еще не устанавливалось. Для обязательных полей надо вызывать исключение,
             # в остальных случаях не существенно
             raise ValueError(self.error_message('Not specified REQUIRED or NOT NULL field value!'))
 
-        return self.value
+        return self.value.get(instance, None)
 
     def __set__(self, instance, value):
         # флаг None будет сигнализировать о том, что поле вобще отсутсвует в запросе
@@ -77,7 +72,7 @@ class Field(object):
         if not self.nullable and not value:  # value is None:
             raise ValueError(self.error_message('Write EMPTY value to NOT EMPTY field!'))
 
-        self.value = value
+        self.value[instance] = value
 
     def error_message(self, msg):
         return '{0}{1}'.format('Field: {0}. '.format(self.field_name) if self.field_name else '', msg)
@@ -140,7 +135,7 @@ class BirthDayField(DateField):
     def __set__(self, instance, value):
         super(BirthDayField, self).__set__(instance, value)
 
-        if self.value and datetime.date.today() - self.value > datetime.timedelta(days=365*70):
+        if self.value[instance] and datetime.date.today() - self.value[instance] > datetime.timedelta(days=365*70):
             raise ValueError(self.error_message('Invalid value of Birthday field! Age can`t be more than 70 years'))
 
 class GenderField(Field):
@@ -172,19 +167,21 @@ class ClientIDsField(Field):
         super(ClientIDsField, self).__set__(instance, value)
 
 
-class ClientsInterestsRequest(object):
+class RequestBase(object):
+
+    def __init__(self, **kwargs):
+        for field in self.__class__.__dict__:
+            if isinstance(self.__class__.__dict__[field], Field):
+                setattr(self, field, kwargs.get(field, None))
+
+
+class ClientsInterestsRequest(RequestBase):
 
     client_ids = ClientIDsField(required=True, field_name='client_ids')
     date = DateField(required=False, nullable=True, field_name='date')
 
-    def __init__(self, **kwargs):
-        # такой подход красив, но имеет 1 минус - если не передано required поле, на данном этапе не возникнет
-        # исключения. Вобще оно возникнет, но только потом - при попытке считать значение этого поля...
-        #for arg in kwargs:
-        for field in ['client_ids', 'date']:
-            setattr(self, field, kwargs.get(field, None))
 
-class OnlineScoreRequest(object):
+class OnlineScoreRequest(RequestBase):
 
     first_name = CharField(required=False, nullable=True, field_name='first_name')
     last_name = CharField(required=False, nullable=True, field_name='last_name')
@@ -194,9 +191,7 @@ class OnlineScoreRequest(object):
     gender = GenderField(required=False, nullable=True, field_name='gender')
 
     def __init__(self, **kwargs):
-        #for arg in kwargs:  # такой подход не вызывает исключения при отсутсвии обязательного аргумента
-        for field in ['first_name', 'last_name', 'email', 'phone', 'birthday', 'gender']:
-            setattr(self, field, kwargs.get(field, None))
+        super(OnlineScoreRequest, self).__init__(**kwargs)
 
         if not self.is_valid():
             raise ValueError('Not all required fields are filled in: {0}'.format(self.invalid_fields()))
@@ -214,17 +209,14 @@ class OnlineScoreRequest(object):
             msg.append('Gender and Birthday')
         return ' or '.join(msg)
 
-class MethodRequest(object):
+
+class MethodRequest(RequestBase):
+
     account = CharField(required=False, nullable=True, field_name='account')
     login = CharField(required=True, nullable=True, field_name='login')
     token = CharField(required=True, nullable=True, field_name='token')
     arguments = ArgumentsField(required=True, nullable=True, field_name='arguments')
     method = CharField(required=True, nullable=False, field_name='method')
-
-    def __init__(self, **kwargs):
-        #for arg in kwargs:  # такой подход не вызывает исключения при отсутсвии обязательного аргумента
-        for field in ['account', 'login', 'token', 'arguments', 'method']:
-            setattr(self, field, kwargs.get(field, None))
 
     @property
     def is_admin(self):
@@ -249,7 +241,13 @@ def check_auth(request):
     return False
 
 def method_handler(request, ctx, store):
-    # returns: response - json data or str (error message), code - response code
+    """ returns: response - json data or str (error message), code - response code """
+
+    router = {
+        'online_score': scores_handler,
+        'clients_interests': interests_handler
+    }
+
     try:
         request_ = MethodRequest(**request['body'])
 
@@ -282,11 +280,6 @@ def interests_handler(request, context, store):
         res['client_id{0}'.format(cid)] = scoring.get_interests(store, cid)
 
     return res, OK
-
-router = {
-    'online_score': scores_handler,
-    'clients_interests': interests_handler
-}
 
 
 class MainHTTPHandler(BaseHTTPRequestHandler):
