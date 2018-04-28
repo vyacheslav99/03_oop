@@ -104,68 +104,6 @@ class TestSuite(unittest.TestCase):
         _, code = self.get_response(request)
         self.assertEqual(api.INVALID_REQUEST, code, 'Failed case "%s"' % test_name)
 
-    # def test_type_args_field(self):
-    #     _, code = self.get_response({"account": "horns&hoofs", "login": "h&f", "method": "clients_interests",
-    #                                  "arguments": [4,6,8,'aaa']})
-    #     self.assertEqual(api.INVALID_REQUEST, code)
-    #
-    # def test_type_id_field(self):
-    #     _, code = self.get_response({"account": "horns&hoofs", "login": "h&f", "method": "clients_interests",
-    #                                  "arguments": {"client_ids": '1,2,3,4,5', "date": "20.07.2017"}})
-    #     self.assertEqual(api.INVALID_REQUEST, code)
-    #
-    # def test_type_date_field(self):
-    #     _, code = self.get_response({"account": "horns&hoofs", "login": "h&f", "method": "clients_interests",
-    #                                  "arguments": {"client_ids": [1,2,3], "date": "2017-07-20"}})
-    #     self.assertEqual(api.INVALID_REQUEST, code)
-    #
-    # def test_type_char_field(self):
-    #     _, code = self.get_response({"account": "horns&hoofs", "login": "h&f", "method": "online_score",
-    #         "arguments": {"phone": "79175002040", "email": "stupnikov@otus.ru", "first_name": 987,
-    #                       "last_name": "Ступников", "birthday": "01.01.1990", "gender": 1}})
-    #     self.assertEqual(api.INVALID_REQUEST, code)
-    #
-    # def test_type_phone_field(self):
-    #     _, code = self.get_response({"account": "horns&hoofs", "login": "h&f", "method": "online_score",
-    #         "arguments": {"phone": 258.8693241, "email": "stupnikov@otus.ru", "first_name": "Стансилав",
-    #                       "last_name": "Ступников", "birthday": "01.01.1990", "gender": 1}})
-    #     self.assertEqual(api.INVALID_REQUEST, code)
-    #
-    # def test_type_gender_field(self):
-    #     _, code = self.get_response({"account": "horns&hoofs", "login": "h&f", "method": "online_score",
-    #         "arguments": {"phone": "79175002040", "email": "stupnikov@otus.ru", "first_name": "Стансилав",
-    #                       "last_name": "Ступников", "birthday": "01.01.1990", "gender": '1'}})
-    #     self.assertEqual(api.INVALID_REQUEST, code)
-    #
-    # def test_invalid_email(self):
-    #     _, code = self.get_response({"account": "horns&hoofs", "login": "h&f", "method": "online_score",
-    #         "arguments": {"phone": "79175002040", "email": "stupnikov.ru", "first_name": "Стансилав",
-    #                       "last_name": "Ступников", "birthday": "01.01.1990", "gender": 1}})
-    #     self.assertEqual(api.INVALID_REQUEST, code)
-    #
-    # def test_invalid_phone(self):
-    #     _, code = self.get_response({"account": "horns&hoofs", "login": "h&f", "method": "online_score",
-    #         "arguments": {"phone": 2284356, "email": "stupnikov.ru", "first_name": "Стансилав",
-    #                       "last_name": "Ступников", "birthday": "01.01.1990", "gender": 1}})
-    #     self.assertEqual(api.INVALID_REQUEST, code)
-    #
-    # def test_empty_id_field(self):
-    #     _, code = self.get_response({"account": "horns&hoofs", "login": "h&f", "method": "clients_interests",
-    #                                  "arguments": {"client_ids": [], "date": "20.07.2017"}})
-    #     self.assertEqual(api.INVALID_REQUEST, code)
-    #
-    # def test_invalid_birthday(self):
-    #     _, code = self.get_response({"account": "horns&hoofs", "login": "h&f", "method": "online_score",
-    #         "arguments": {"phone": "79175002040", "email": "stupnikov@otus.ru", "first_name": "Стансилав",
-    #                       "last_name": "Ступников", "birthday": "01.01.1856", "gender": 1}})
-    #     self.assertEqual(api.INVALID_REQUEST, code)
-    #
-    # def test_invalid_gender(self):
-    #     _, code = self.get_response({"account": "horns&hoofs", "login": "h&f", "method": "online_score",
-    #         "arguments": {"phone": "79175002040", "email": "stupnikov@otus.ru", "first_name": "Стансилав",
-    #                       "last_name": "Ступников", "birthday": "01.01.1990", "gender": -1}})
-    #     self.assertEqual(api.INVALID_REQUEST, code)
-
 
 if __name__ == "__main__":
     unittest.main()
