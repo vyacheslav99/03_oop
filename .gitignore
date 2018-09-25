@@ -2,3 +2,5 @@
 logs/
 *.pyc
 *.bat
+/docs/homework.pdf
+/docs/homework_tests.pdf
